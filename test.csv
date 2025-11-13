@@ -1,0 +1,7 @@
+date,person,miles run
+2024-01-15,John Smith,5.2
+invalid-date,Jane Doe,3.8
+2024-01-17,,4.5
+2024-01-18,Bob Johnson,-2.3
+2024-01-19,Alice,not-a-number
+2024-01-20,Charlie Brown,6.7
