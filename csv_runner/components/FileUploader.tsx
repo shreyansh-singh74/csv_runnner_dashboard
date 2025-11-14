@@ -8,20 +8,25 @@ import {
   ACCEPTED_DATE_FORMATS,
   RowError,
 } from "@/lib/csvValidation";
+import { normalizeRows } from "@/lib/csvNormalization";
+
 interface FileUploaderProps {
   onDataParsed: (data: any[]) => void;
   onValidationErrors?: (errors: RowError[]) => void;
+  onLoadingChange?: (isLoading: boolean) => void;
 }
 
 export default function FileUploader({
   onDataParsed,
   onValidationErrors,
+  onLoadingChange,
 }: FileUploaderProps) {
   const [fileName, setFileName] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<RowError[]>([]);
   const [showErrors, setShowErrors] = useState(false);
-
+  const [isLoading, setIsLoading] = useState(false);
+  
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
 
@@ -37,6 +42,8 @@ export default function FileUploader({
     // Clear previous errors
     setError(null);
     setFileName(file.name);
+    setIsLoading(true);
+    onLoadingChange?.(true); // Notify parent of loading state
 
     // Parse CSV
     Papa.parse(file, {
@@ -45,6 +52,8 @@ export default function FileUploader({
       complete: (results) => {
         if (results.errors.length > 0) {
           setError("Error parsing CSV file");
+          setIsLoading(false);
+          onLoadingChange?.(false); // Notify parent loading is done
           return;
         }
 
@@ -59,6 +68,8 @@ export default function FileUploader({
           setError(validationResult.headerError);
           setValidationErrors([]);
           onDataParsed([]);
+          setIsLoading(false);
+          onLoadingChange?.(false); // Notify parent loading is done
           return;
         }
 
@@ -67,14 +78,23 @@ export default function FileUploader({
         if (onValidationErrors) {
           onValidationErrors(validationResult.errors);
         }
-
-        // Pass only valid rows to parent
-        onDataParsed(validationResult.validRows);
-
-        // Clear header error if validation passed
-        setError(null);
+        
+        try{
+          const normalizedRows = normalizeRows(validationResult.validRows);
+          onDataParsed(normalizedRows);
+          setIsLoading(false);
+          onLoadingChange?.(false); // Notify parent loading is done
+        }catch(error){
+          setError(`Error normalizing data: ${error instanceof Error ? error.message : "Unknown error"}`);
+          onDataParsed([]);
+          setIsLoading(false);
+          onLoadingChange?.(false); // Notify parent loading is done
+          return;
+        }
       },
       error: (error) => {
+        setIsLoading(false);
+        onLoadingChange?.(false); // Notify parent loading is done
         setError(`Failed to parse file: ${error.message}`);
       },
     });
@@ -93,10 +113,19 @@ export default function FileUploader({
           type="file"
           accept=".csv"
           onChange={handleFileChange}
-          className="block w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+          className="block w-full text-sm text-foreground file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+          aria-label="Upload CSV file"
+          disabled={isLoading}
         />
 
-        {fileName && (
+        {isLoading && (
+          <div className="flex items-center justify-center py-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <span className="ml-2 text-sm text-muted-foreground">Processing CSV...</span>
+          </div>
+        )}
+
+        {fileName && !isLoading && (
           <p className="text-sm text-muted-foreground">
             Selected: <span className="font-medium">{fileName}</span>
           </p>
@@ -115,7 +144,8 @@ export default function FileUploader({
                   </p>
                   <button
                     onClick={() => setShowErrors(!showErrors)}
-                    className="text-sm text-primary underline hover:no-underline"
+                    className="text-sm text-primary underline hover:no-underline focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded"
+                    aria-label={showErrors ? "Hide validation errors" : "Show validation errors"}
                   >
                     {showErrors ? "Hide errors" : "Show errors"}
                   </button>
